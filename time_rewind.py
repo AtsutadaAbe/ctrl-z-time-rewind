@@ -31,31 +31,29 @@ root.wm_attributes("-transparentcolor", TRANSPARENT_COLOR)
 # 起動時は非表示
 root.withdraw()
 
-# 画面中央にウィンドウを配置
-window_width = 500
-window_height = 500
-
+# 画面全体のサイズを取得
 screen_width = root.winfo_screenwidth()
 screen_height = root.winfo_screenheight()
 
-x = (screen_width - window_width) // 2
-y = (screen_height - window_height) // 2
+# ウィンドウを画面全体に広げる
+window_width = screen_width
+window_height = screen_height
 
-root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+root.geometry(f"{window_width}x{window_height}+0+0")
 
-# 時計を描画する領域
+# 画面全体を描画領域にする
 canvas = tk.Canvas(
     root,
-    width=400,
-    height=400,
+    width=screen_width,
+    height=screen_height,
     bg=TRANSPARENT_COLOR,
     highlightthickness=0
 )
-canvas.pack(pady=20)
+canvas.pack()
 
 # 時計の中心座標
-cx = 200
-cy = 200
+cx = screen_width // 2
+cy = screen_height // 2
 angle = 0
 
 # キー入力イベントを受け渡す
@@ -72,6 +70,28 @@ message_after_id = None
 impact_font_size = 12
 impact_after_id = None
 
+# 衝撃波アニメーションの管理
+shockwave_radius = 10
+shockwave_after_id = None
+
+# 画面全体を覆うために必要な衝撃波の半径
+shockwave_max_radius = math.hypot(
+    screen_width / 2,
+    screen_height / 2
+)
+
+# 衝撃波を約0.8秒で画面全体に広げる
+shockwave_interval = 25
+shockwave_duration = 800
+
+# アニメーションの実行回数
+shockwave_steps = shockwave_duration // shockwave_interval
+
+# 1回あたりの半径の増加量
+shockwave_speed = (
+    shockwave_max_radius - 10
+) / shockwave_steps
+
 # Ctrl+Zの押下状態
 pressed_ctrl = False
 pressed_z = False
@@ -81,8 +101,9 @@ pressed_shift = False
 pressed_q = False
 
 # 時計の外枠
-canvas.create_oval(
-    80, 80, 320, 320,
+clock_frame = canvas.create_oval(
+    cx - 120, cy - 120,
+    cx + 120, cy + 120,
     outline="#163A70",
     width=7
 )
@@ -100,12 +121,13 @@ for i in range(12):
     canvas.create_line(
         x1, y1, x2, y2,
         fill="#163A70",
-        width=4
+        width=4,
+        tags="clock_tick"
     )
 
 # 長針
 canvas.create_line(
-    cx, cy, cx, 110,
+    cx, cy, cx, cy - 90,
     fill="#D62828",
     width=7,
     tags="minute_hand"
@@ -113,14 +135,14 @@ canvas.create_line(
 
 # 短針
 canvas.create_line(
-    cx, cy, 150, 180,
+    cx, cy, cx, cy - 60,
     fill="#111827",
     width=9,
     tags="hour_hand"
 )
 
 # 時計の中心
-canvas.create_oval(
+clock_center = canvas.create_oval(
     cx - 7, cy - 7,
     cx + 7, cy + 7,
     fill="#111827",
@@ -129,7 +151,7 @@ canvas.create_oval(
 
 # メッセージをCanvasに描画
 message_text = canvas.create_text(
-    200, 370,
+    cx, cy + 170,
     text="時を戻そう！",
     font=("Yu Gothic UI", 12, "bold"),
     fill="#111827",
@@ -138,13 +160,27 @@ message_text = canvas.create_text(
 
 # 漫画風の擬音をCanvasに追加
 impact_text = canvas.create_text(
-    200, 200,
+    cx, cy,
     text="ズキューン！",
     font=("Yu Gothic UI", 12, "bold"),
     fill="#D62828",
     state="hidden",
     tags="impact"
 )
+
+# 衝撃波用の円を作成
+shockwave = canvas.create_oval(
+    cx - 10, cy - 10,
+    cx + 10, cy + 10,
+    outline="#D62828",
+    fill="#000000",
+    width=4,
+    state="hidden",
+    tags="shockwave"
+)
+
+# 衝撃波をCanvas内の最背面に移動
+canvas.tag_lower(shockwave)
 
 def rewind_clock():
     global angle, clock_after_id
@@ -236,6 +272,46 @@ def hide_impact():
 
 # 音声ファイルの場所
 sound_path = Path(__file__).resolve().parent / "rewind.wav"
+
+def animate_shockwave():
+    global shockwave_radius, shockwave_after_id
+
+    # 演出停止中なら何もしない
+    if not is_animating:
+        return
+
+    # 衝撃波を表示
+    canvas.itemconfig(shockwave, state="normal")
+
+    # 画面サイズに合わせた速度で半径を大きくする
+    shockwave_radius += shockwave_speed
+
+    # 黒い衝撃波が時計の外枠付近まで広がったら白くする
+    if shockwave_radius >= 120:
+        canvas.itemconfig(clock_frame, outline="#FFFFFF")
+        canvas.itemconfig("minute_hand", fill="#FF5555")
+        canvas.itemconfig("hour_hand", fill="#FFFFFF")
+        canvas.itemconfig("clock_tick", fill="#FFFFFF")
+        canvas.itemconfig(clock_center, fill="#FFFFFF")
+
+    # 衝撃波が文字の位置まで広がったら白くする
+    if shockwave_radius >= 190:
+        canvas.itemconfig(message_text, fill="#FFFFFF")
+
+    # 円の座標を更新
+    canvas.coords(
+        shockwave,
+        cx - shockwave_radius,
+        cy - shockwave_radius,
+        cx + shockwave_radius,
+        cy + shockwave_radius
+    )
+
+    # 画面全体を覆うまで拡大を続ける
+    if shockwave_radius < shockwave_max_radius:
+        shockwave_after_id = root.after(25, animate_shockwave)
+    else:
+        shockwave_after_id = None
 
 def play_voice():
     if sound_path.exists():
@@ -357,6 +433,7 @@ def stop_rewind():
     global is_animating
     global clock_after_id, message_after_id
     global impact_after_id
+    global shockwave_after_id
 
     is_animating = False
 
@@ -376,11 +453,28 @@ def stop_rewind():
     # 擬音を非表示に戻す
     canvas.itemconfig(impact_text, state="hidden")
 
+    # 衝撃波の予約を取り消す
+    if shockwave_after_id is not None:
+        root.after_cancel(shockwave_after_id)
+        shockwave_after_id = None
+
+    # 衝撃波を非表示に戻す
+    canvas.itemconfig(shockwave, state="hidden")
+
+    # 時計の色を元に戻す
+    canvas.itemconfig(clock_frame, outline="#163A70")
+    canvas.itemconfig("minute_hand", fill="#D62828")
+    canvas.itemconfig("hour_hand", fill="#111827")
+    canvas.itemconfig("clock_tick", fill="#163A70")
+    canvas.itemconfig(clock_center, fill="#111827")
+    canvas.itemconfig(message_text, fill="#111827")
+
     root.withdraw()
 
 def start_rewind():
     global is_animating, angle, font_size
     global impact_font_size
+    global shockwave_radius
 
     # 演出中は再実行しない
     if is_animating:
@@ -389,8 +483,20 @@ def start_rewind():
     is_animating = True
     angle = 0
     font_size = 12
+
     # 擬音の文字サイズを初期化
     impact_font_size = 12
+
+    # 衝撃波の半径を初期化
+    shockwave_radius = 10
+
+    # 衝撃波を初期位置に戻す
+    canvas.coords(
+        shockwave,
+        cx - 10, cy - 10,
+        cx + 10, cy + 10
+    )
+
     # 時計を画面に表示
     root.deiconify()
     root.lift()
@@ -405,20 +511,11 @@ def start_rewind():
     )
 
     # 演出開始（原因調査用）
-    print("① 時計の演出開始")
     rewind_clock()
-
-    print("② メッセージの演出開始")
     animate_message()
-
-    print("③ ズキューンの演出開始")
     animate_impact()
-
-    print("④ 音声再生開始")
+    root.after(200, animate_shockwave)
     play_voice()
-
-    print("⑤ 終了処理を予約")
-    root.after(1500, stop_rewind)
 
     # 1.5秒後に演出終了
     root.after(1500, stop_rewind)
