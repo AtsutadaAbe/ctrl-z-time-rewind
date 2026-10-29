@@ -68,6 +68,10 @@ is_animating = False
 clock_after_id = None
 message_after_id = None
 
+# 擬音演出の管理
+impact_font_size = 12
+impact_after_id = None
+
 # Ctrl+Zの押下状態
 pressed_ctrl = False
 pressed_z = False
@@ -132,6 +136,16 @@ message_text = canvas.create_text(
     tags="message"
 )
 
+# 漫画風の擬音をCanvasに追加
+impact_text = canvas.create_text(
+    200, 200,
+    text="ズキューン！",
+    font=("Yu Gothic UI", 12, "bold"),
+    fill="#D62828",
+    state="hidden",
+    tags="impact"
+)
+
 def rewind_clock():
     global angle, clock_after_id
 
@@ -188,6 +202,37 @@ def animate_message():
         )
 
         message_after_id = root.after(50, animate_message)
+
+def animate_impact():
+    global impact_font_size, impact_after_id
+
+    if not is_animating:
+        return
+
+    # 文字を表示
+    canvas.itemconfig(impact_text, state="normal")
+
+    # 文字を拡大
+    impact_font_size += 4
+
+    canvas.itemconfig(
+        impact_text,
+        font=("Yu Gothic UI", impact_font_size, "bold")
+    )
+
+    if impact_font_size < 48:
+        # 40ミリ秒後に再び拡大
+        impact_after_id = root.after(40, animate_impact)
+    else:
+        # 最大サイズで400ミリ秒維持してから消す
+        impact_after_id = root.after(400, hide_impact)
+
+
+def hide_impact():
+    global impact_after_id
+
+    canvas.itemconfig(impact_text, state="hidden")
+    impact_after_id = None
 
 # 音声ファイルの場所
 sound_path = Path(__file__).resolve().parent / "rewind.wav"
@@ -311,6 +356,7 @@ def on_release(key):
 def stop_rewind():
     global is_animating
     global clock_after_id, message_after_id
+    global impact_after_id
 
     is_animating = False
 
@@ -322,10 +368,19 @@ def stop_rewind():
         root.after_cancel(message_after_id)
         message_after_id = None
 
+    # 擬音アニメーションの予約を取り消す
+    if impact_after_id is not None:
+        root.after_cancel(impact_after_id)
+        impact_after_id = None
+
+    # 擬音を非表示に戻す
+    canvas.itemconfig(impact_text, state="hidden")
+
     root.withdraw()
 
 def start_rewind():
     global is_animating, angle, font_size
+    global impact_font_size
 
     # 演出中は再実行しない
     if is_animating:
@@ -334,7 +389,8 @@ def start_rewind():
     is_animating = True
     angle = 0
     font_size = 12
-
+    # 擬音の文字サイズを初期化
+    impact_font_size = 12
     # 時計を画面に表示
     root.deiconify()
     root.lift()
@@ -348,10 +404,21 @@ def start_rewind():
         font=("Yu Gothic UI", font_size, "bold")
     )
 
-    # 演出開始
+    # 演出開始（原因調査用）
+    print("① 時計の演出開始")
     rewind_clock()
+
+    print("② メッセージの演出開始")
     animate_message()
+
+    print("③ ズキューンの演出開始")
+    animate_impact()
+
+    print("④ 音声再生開始")
     play_voice()
+
+    print("⑤ 終了処理を予約")
+    root.after(1500, stop_rewind)
 
     # 1.5秒後に演出終了
     root.after(1500, stop_rewind)
